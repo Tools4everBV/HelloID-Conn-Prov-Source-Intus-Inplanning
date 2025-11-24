@@ -1,7 +1,7 @@
 ##################################################
 # HelloID-Conn-Prov-Source-Inplanning-Persons
 #
-# Version: 1.1.0
+# Version: 1.1.1
 ##################################################
 # Initialize default value's
 $config = $configuration | ConvertFrom-Json
@@ -95,7 +95,10 @@ try {
     $startDate = $today.AddDays( - $($config.HistoricalDays)).ToString('yyyy-MM-dd')
     $endDate = $today.AddDays($($config.FutureDays)).ToString('yyyy-MM-dd')
 
+
+
     foreach ($person in $persons) {
+        start-sleep  -Milliseconds 500
         try {
             If(($person.resource.Length -gt 0) -Or ($null -ne $person.resource)){
 
@@ -116,9 +119,17 @@ try {
                 Uri     = "$($config.BaseUrl)/roster/resourceRoster?resource=$($person.resource)&startDate=$($startDate)&endDate=$($endDate)"
                 Headers = $headers
                 Method  = 'GET'
+                TimeoutSec = 45
             }
+            
+            try {
+                    $personShifts = Invoke-RestMethod @splatGetUsersShifts
+                } catch {
+                     Write-warning "Timeout or error fetching shifts for user [$($person.username)] with resource ID [$($person.resource)]. Error: $($_.Exception.Message)"
+                     continue
+                 }
 
-            $personShifts = Invoke-RestMethod @splatGetUsersShifts
+            #$personShifts = Invoke-RestMethod @splatGetUsersShifts
 
             If($personshifts.count -gt 0){
             $counter = 0
@@ -130,18 +141,39 @@ try {
                     $rosterDate = $day.rosterDate
                     foreach ($part in $day.parts) {
                         $counter = ($counter + 1)
-                        # Define the pattern for hh:mm-hh:mm
-                        $pattern = '^\d{2}:\d{2}-\d{2}:\d{2}'
-                        $time = [regex]::Match($part.shift.uname, $pattern)
+                      if ($part.shift.uname -like '*:*') {
+                                $pattern = '^\d{2}:\d{2}-\d{2}:\d{2}'
+                                $isFormatted = $true
+                            } else {
+                                # Formaat: hhmm-hhmm .
+                                $pattern = '^\d{4}-\d{4}'
+                                $isFormatted = $false
+                            }
+                          
+                            $time = [regex]::Match($part.shift.uname, $pattern)
+                           
+                            if ($time.Success) {
+                                $times = $time.value -split '-'
+                                
+                                $startTimeUnformatted = $times[0]
+                                $endTimeUnformatted = $times[1]
 
-                        if ($time.Success) {
-                            $times = $time.value -split '-'
-                            $startTime = $times[0]
-                            $endTime = $times[1]
-                        } else {
-                            $startTime = '00:00'
-                            $endTime = '00:00'
-                        }
+                                #Formatteer naar HH:MM 
+                                if (-not $isFormatted) {
+                                    # Converteert "0700" naar "07:00"
+                                    $startTime = "$($startTimeUnformatted.Substring(0, 2)):$($startTimeUnformatted.Substring(2, 2))"
+                                    $endTime = "$($endTimeUnformatted.Substring(0, 2)):$($endTimeUnformatted.Substring(2, 2))"
+                                } else {
+                                    
+                                    $startTime = $startTimeUnformatted
+                                    $endTime = $endTimeUnformatted
+                                }
+
+                            } else {
+                                $startTime = '00:00'
+                                $endTime = '00:00'
+                                
+                            }
 
                         if($part.prop){
                             $functioncode = $part.prop.uname
@@ -165,8 +197,14 @@ try {
                             startAt         = "$($rosterDate)T$($startTime):00Z"
                             endAt           = "$($rosterDate)T$($endTime):00Z"
                         }
-
-                        $contracts.Add($ShiftContract)
+                       if (
+                                ([string]::IsNullOrEmpty($ShiftContract.functionname) -ne $True) # Function should not be empty. 
+                                ) {
+                                $contracts.Add($ShiftContract)
+                                } else {
+                                    #$contracts.Add($ShiftContract) # If you need the contracts without the functionnames enable this line. 
+                                 }
+                        
                     }
                 }
             }
@@ -178,7 +216,10 @@ try {
                     FirstName   = $person.firstName
                     LastName    = $person.lastName
                     Email       = $person.email
-                    Contracts   = $contracts
+                    Role        = $($person.roles.role | Sort-Object | Get-Unique)
+                    resourceGroup= $($person.roles.resourceGroup | Sort-Object | Get-Unique)
+                    shiftGroup   = $($person.roles.shiftGroup | Sort-Object | Get-Unique)
+                    Contracts    = $contracts
                 }
                 Write-Output $personObj | ConvertTo-Json -Depth 20
             }}
@@ -186,11 +227,11 @@ try {
             $ex = $PSItem
             if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException')) {
                 $errorObj = Resolve-InplanningError -ErrorObject $ex
-                Write-Verbose "Could not import Inplanning person [$($person.uname)]. Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
-                Write-Error "Could not import Inplanning person [$($person.uname)]. Error: $($errorObj.FriendlyMessage)"
+                Write-Verbose "Could not import Inplanning person [$($person.username)]. Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
+                Write-Error "Could not import Inplanning person [$($person.username)]. Error: $($errorObj.FriendlyMessage)"
             } else {
-                Write-Verbose "Could not import Inplanning person [$($person.uname)]. Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
-                Write-Error "Could not import Inplanning person [$($person.uname)]. Error: $($errorObj.FriendlyMessage)"
+                Write-Verbose "Could not import Inplanning person [$($person.username)]. Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
+                Write-Error "Could not import Inplanning person [$($person.username)]. Error: $($errorObj.FriendlyMessage)"
             }
         }
     }
