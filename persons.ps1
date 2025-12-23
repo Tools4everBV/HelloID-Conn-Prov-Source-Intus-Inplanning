@@ -1,7 +1,7 @@
 ##################################################
 # HelloID-Conn-Prov-Source-Inplanning-Persons
 #
-# Version: 1.1.1
+# Version: 1.1.0
 ##################################################
 # Initialize default value's
 $config = $configuration | ConvertFrom-Json
@@ -119,17 +119,31 @@ try {
                 Uri     = "$($config.BaseUrl)/roster/resourceRoster?resource=$($person.resource)&startDate=$($startDate)&endDate=$($endDate)"
                 Headers = $headers
                 Method  = 'GET'
-                TimeoutSec = 45
+                TimeoutSec = 3
             }
             
-            try {
+            # Retry logic for fetching shifts
+            $maxRetries = 3
+            $retryCount = 0
+            $success = $false
+            
+            while (-not $success -and $retryCount -lt $maxRetries) {
+                try {
                     $personShifts = Invoke-RestMethod @splatGetUsersShifts
+                    $success = $true
                 } catch {
-                     Write-warning "Timeout or error fetching shifts for user [$($person.username)] with resource ID [$($person.resource)]. Error: $($_.Exception.Message)"
-                     continue
-                 }
-
-            #$personShifts = Invoke-RestMethod @splatGetUsersShifts
+                    $retryCount++
+                    if ($retryCount -lt $maxRetries) {
+                        Write-Warning "Retrying shifts for user [$($person.username)] with resource ID [$($person.resource)]... ($retryCount/$maxRetries). Error: $($_.Exception.Message)"
+                        Start-Sleep -Milliseconds 500
+                    }
+                }
+            }
+            
+            if (-not $success) {
+                Write-Warning "Could not fetch shifts for user [$($person.username)] with resource ID [$($person.resource)] after $maxRetries attempts. Skipping user."
+                continue
+            }
 
             If($personshifts.count -gt 0){
             $counter = 0
