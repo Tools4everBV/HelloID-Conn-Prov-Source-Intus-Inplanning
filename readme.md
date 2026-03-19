@@ -1,9 +1,7 @@
 
-# HelloID-Conn-Prov-Source-Inplanning
+# HelloID-Conn-Prov-Source-Intus-Inplanning
 
-[![Workflow Status](https://github.com/Tools4everBV/HelloID-Conn-Prov-Source-Inplanning/actions/workflows/createRelease.yaml/badge.svg)](https://github.com/Tools4everBV/HelloID-Conn-Prov-Source-Inplanning/actions/workflows/createRelease.yaml)
-![Release](https://img.shields.io/github/v/release/Tools4everBV/HelloID-Conn-Prov-Source-Inplanning?label=Release)
-
+**Readme is work in progress**
 
 | :information_source: Information                                                                                                                                                                                                                                                                                                                                                       |
 | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -15,7 +13,7 @@
 
 ## Table of contents
 
-- [HelloID-Conn-Prov-Source-Inplanning](#HelloID-Conn-Prov-Source-Inplanning)
+- [HelloID-Conn-Prov-Source-Intus-Inplanning](#helloid-conn-prov-source-intus-inplanning)
   - [Table of contents](#table-of-contents)
   - [Introduction](#introduction)
     - [Endpoints](#endpoints)
@@ -28,17 +26,19 @@
 
 ## Introduction
 
-_HelloID-Conn-Prov-Source-Inplanning_ is a _source_ connector. The purpose of this connector is to import _humanresources_ and their _resourceRoster_. A resourceRoster represents a timetable consisting of days and parts which include work places.
+_HelloID-Conn-Prov-Source-Intus-Inplanning_ is a _source_ connector. The purpose of this connector is to import _humanresources_ and their _resourceRoster_. A resourceRoster represents a timetable consisting of days and parts which include work places.
 
 ### Endpoints
 
 Currently the following endpoints are being used..
 
-| Endpoint                     |
-| ---------------------------- |
-| api/token                    |
-| api/users                    |
-| api/roster/resourceRoster    |
+| Endpoint                  | Description                                           |
+| ------------------------- | ----------------------------------------------------- |
+| api/token                 |                                                       |
+| api/users                 | Default endpoint to get all users                     |
+| api/humanresources        | Optional endpoint to receive employees without a user |
+| api/resourcegroups        | To calculate upper department                         |
+| api/roster/resourceRoster |                                                       |
 
 
 - The API documentation can be found at the URLs below. Make sure to replace {customerName} with the customer's name to create a working URL.
@@ -51,13 +51,13 @@ Currently the following endpoints are being used..
 
 The following settings are required to connect to the API.
 
-| Setting    | Description                                                                            | Mandatory |
-| ---------- | -------------------------------------------------------------------------------------- | --------- |
-| Username     | The Username to connect to the API                                                       | Yes       |
-| Password     | The Password to connect to the API                                                       | Yes       |
-| BaseUrl    | The URL to the API                                                                     | Yes       |
-| HistoricalDays | - The number of days in the past from which the shifts will be imported.<br> - Will be converted to a `[DateTime]` object containing the _current date_ __minus__ the number of days specified. | Yes       |
-| FutureDays | - The number of days in the future from which the shifts will be imported.<br> - Will be converted to a `[DateTime]` object containing the _current date_ __plus__ the number of days specified. | Yes       |
+| Setting        | Description                                                                                                                                                                                      | Mandatory |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------- |
+| Username       | The Username to connect to the API                                                                                                                                                               | Yes       |
+| Password       | The Password to connect to the API                                                                                                                                                               | Yes       |
+| BaseUrl        | The URL to the API                                                                                                                                                                               | Yes       |
+| HistoricalDays | - The number of days in the past from which the shifts will be imported.<br> - Will be converted to a `[DateTime]` object containing the _current date_ __minus__ the number of days specified.  | Yes       |
+| FutureDays     | - The number of days in the future from which the shifts will be imported.<br> - Will be converted to a `[DateTime]` object containing the _current date_ __plus__ the number of days specified. | Yes       |
 
 ### Remarks
 
@@ -79,8 +79,6 @@ Only persons who have active shifts in the timeframe defined by `HistoricalDays`
 ## Getting help
 
 > ℹ️ _For more information on how to configure a HelloID PowerShell connector, please refer to our [documentation](https://docs.helloid.com/hc/en-us/articles/360012557600-Configure-a-custom-PowerShell-source-system) pages_
-
-> ℹ️ _If you need help, feel free to ask questions on our [forum](https://forum.helloid.com/forum/helloid-connectors/provisioning/5176-helloid-provisioning-source-inplanning)
 
 ## HelloID docs
 

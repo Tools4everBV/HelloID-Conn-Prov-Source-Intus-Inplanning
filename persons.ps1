@@ -1,13 +1,23 @@
 ##################################################
-# HelloID-Conn-Prov-Source-Inplanning-Persons
+# HelloID-Conn-Prov-Source-Intus-Inplanning-Persons
 #
 # Version: 1.1.0
 ##################################################
+
+# Sleep is added because the department script needs to finish first (invalid token messages can occur otherwise)
+Start-Sleep -Seconds 30 
+
 # Initialize default value's
 $config = $configuration | ConvertFrom-Json
+$useUserEndpoint = $true
+$Script:expirationTimeAccessToken = $null
+$Script:AuthenticationHeaders = $null
+$Script:BaseUrl = $config.BaseUrl
+$Script:Username = $config.Username
+$Script:Password = $config.Password
 
 #region functions
-function Resolve-InplanningError {
+function Resolve-IntusInplanningError {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory)]
@@ -23,240 +33,346 @@ function Resolve-InplanningError {
         }
 
         try {
-            $httpErrorObj.ErrorDetails = $ErrorObject.ErrorDetails.Message
-            $errorMessage = (($ErrorObject.ErrorDetails.Message | ConvertFrom-Json)).message
-            $httpErrorObj.FriendlyMessage = $errorMessage
-        } catch {
-            $httpErrorObj.FriendlyMessage = "Received an unexpected response. The JSON could not be converted, error: [$($_.Exception.Message)]. Original error from web service: [$($ErrorObject.Exception.Message)]"
+            $errorMessage = (($ErrorObject.ErrorDetails.Message | ConvertFrom-Json))
+            $httpErrorObj.FriendlyMessage = $errorMessage.error_description
+            $httpErrorObj.ErrorDetails = $errorMessage.error
+        }
+        catch {
+            # If the error details cannot be parsed as JSON, we keep the original message as both the error details and friendly message.
         }
         Write-Output $httpErrorObj
     }
 }
 
 function Retrieve-AccessToken {
-    $pair = "$($config.Username):$($config.Password)"
-    $bytes = [System.Text.Encoding]::ASCII.GetBytes($pair)
-    $base64 = [System.Convert]::ToBase64String($bytes)
+    [CmdletBinding()]
+    param()
+    try {
+        $pair = "$($Username):$($Password)"
+        $bytes = [System.Text.Encoding]::ASCII.GetBytes($pair)
+        $base64 = [System.Convert]::ToBase64String($bytes)
+        $tokenHeaders = @{
+            'Content-Type' = 'application/x-www-form-urlencoded'
+            Authorization  = "Basic $base64"
+        }
+        $splatGetToken = @{
+            Uri     = "$($BaseUrl)/token"
+            Headers = $tokenHeaders
+            Method  = 'POST'
+            Body    = 'grant_type=client_credentials'
+        }
 
-    $tokenHeaders = @{
-        'Content-Type' = 'application/x-www-form-urlencoded'
-        Authorization  = "Basic $base64"
+        $retryCount = 0
+        $maxRetries = 5
+        do {
+            try {
+                $access_token = (Invoke-RestMethod @splatGetToken)
+                break
+            }
+            catch {
+                $retryCount++
+                $ex = $PSItem
+                $errorObj = Resolve-IntusInplanningError -ErrorObject $ex
+                $retryCount++
+                if ($retryCount -lt $maxRetries) {
+                    Write-Warning "Error during API call. Retry attempt [$retryCount] of [$maxRetries]. Uri [$($splatGetToken.Uri)] Error: [$($errorObj.ErrorDetails)] [$($errorObj.FriendlyMessage)]"
+                    Start-Sleep -Seconds 5
+                }
+                else {
+                    throw $ex
+                }
+            }
+        } while ($retryCount -lt $maxRetries)
+
+        $Script:expirationTimeAccessToken = (Get-Date).AddSeconds($access_token.expires_in)
+        return $access_token.access_token
+    } 
+    catch {
+        $PSCmdlet.ThrowTerminatingError($_)
     }
-
-    $splatGetToken = @{
-        Uri     = "$($config.BaseUrl)/token"
-        Headers = $tokenHeaders
-        Method  = 'POST'
-        Body    = 'grant_type=client_credentials'
-    }
-
-    $result = (Invoke-RestMethod @splatGetToken)
-    $script:expirationTimeAccessToken = (Get-Date).AddSeconds($result.expires_in)
-
-    return $result.access_token
 }
 
 function Confirm-AccessTokenIsValid {
-    if ($null -ne $Script:expirationTimeAccessToken) {
-        if ((Get-Date) -le $Script:expirationTimeAccessToken) {
-            return $true
+    [CmdletBinding()]
+    param()
+    try {
+        if ($null -ne $Script:expirationTimeAccessToken) {
+            if ((Get-Date) -le $Script:expirationTimeAccessToken) {
+                return $true
+            }
+            write-warning "Access token is no longer valid. Expiration time: $($Script:expirationTimeAccessToken)"
         }
+        return $false
+    } 
+    catch {
+        $PSCmdlet.ThrowTerminatingError($_)
     }
-    return $false
+}
+
+function Invoke-IntusInplanningRestMethod {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]
+        $Uri
+    )
+
+    try {
+        # Check if token is still valid
+        $tokenValid = Confirm-AccessTokenIsValid
+        if ($false -eq $tokenValid) {
+            Start-Sleep -Seconds 5 # Wait 5 seconds before trying to retrieve a new token.
+            $newAccessToken = Retrieve-AccessToken
+            $Script:AuthenticationHeaders = @{
+                Authorization = "Bearer $($newAccessToken)"
+                Accept        = 'application/json; charset=utf-8'
+            }
+            Start-Sleep -Seconds 5 # Wait 5 seconds after trying to retrieve a new token.
+        }
+
+        # Execute with retry logic
+        $retryCount = 0
+        $maxRetries = 5
+        $result = $null
+
+        $SplatRestMethodParameters = @{
+            Uri     = $Uri
+            Headers = $Script:AuthenticationHeaders
+            Method  = 'GET'
+        }
+
+        do {
+            try {
+                $result = Invoke-RestMethod @SplatRestMethodParameters
+                break
+            }
+            catch {
+                $ex = $PSItem
+                $errorObj = Resolve-IntusInplanningError -ErrorObject $ex
+                if ($ex.ErrorDetails.Message -like '*211 - resource: The item you\u0027re trying to edit does not exist.*') {
+                    Write-Warning "Resource does not exist: $Uri"
+                    break
+                }
+                $retryCount++
+                if ($retryCount -lt $maxRetries) {
+                    if (($errorObj.ErrorDetails -eq 'invalid_token') -or ($errorObj.ErrorDetails -eq 'token_expired')) {
+                        Start-Sleep -Seconds 5 # Wait 5 seconds before trying to retrieve a new token.
+                        Write-Warning "Access token is [$($errorObj.ErrorDetails)] [$($errorObj.FriendlyMessage)]. Attempting to retrieve a new access token. Retry attempt $retryCount of $maxRetries."
+                        $newAccessToken = Retrieve-AccessToken
+                        $Script:AuthenticationHeaders = @{
+                            Authorization = "Bearer $($newAccessToken)"
+                            Accept        = 'application/json; charset=utf-8'
+                        }
+                        $SplatRestMethodParameters.Headers = $Script:AuthenticationHeaders
+                        Start-Sleep -Seconds 5 # Wait 5 seconds after trying to retrieve a new token.
+                    }
+                    else {
+                        Write-Warning "Error during API call. Retry attempt [$retryCount] of [$maxRetries]. Uri [$($SplatRestMethodParameters.Uri)] Error: [$($errorObj.ErrorDetails)] [$($errorObj.FriendlyMessage)]"
+                    }
+                    Start-Sleep -Milliseconds 500
+                }
+                else {
+                    throw $ex
+                }
+            }
+        } while ($retryCount -lt $maxRetries)
+
+        return $result
+    }
+    catch {
+        $PSCmdlet.ThrowTerminatingError($_)
+    }
 }
 #endregion functions
 
-try {
-    $accessToken = Retrieve-AccessToken
-    $headers = @{
-        Authorization = "Bearer $($accessToken)"
-        Accept        = 'application/json; charset=utf-8'
-    }
+try {   
+    $actionMessage = "retrieving users"
 
-    $splatGetUsers = @{
-        Uri     = "$($config.BaseUrl)/users?limit=0"
-        Headers = $headers
-        Method  = 'GET'
+    if ($useUserEndpoint -eq $true) {
+        $splatGetUsers = @{
+            Uri = "$($Script:BaseUrl)/users?limit=0"
+        }
+        $persons = Invoke-IntusInplanningRestMethod @splatGetUsers
+        Write-Information "Total number of persons retrieved: $($persons.count)."
+        $persons = $persons | Where-Object active -eq "True"
+        $persons = $persons | Sort-Object resource -Unique
+        Write-Information "Total number of active persons retrieved: $($persons.count)."
     }
+    else {
+        $splatGetUsers = @{
+            Uri = "$($Script:BaseUrl)/humanresources?limit=0"
+        }  
+        $persons = Invoke-IntusInplanningRestMethod @splatGetUsers
+        Write-Information "Total number of humanresources retrieved: $($persons.count)."
+        $persons | Add-Member -MemberType NoteProperty -Name "resource" -Value $null -Force
+        $persons = $persons | ForEach-Object { $_.resource = $_.uname; $_ }
+        # Filter out persons where all labourHists have startDate in future or endDate in past
+        $persons = $persons | Where-Object {
+            $person = $_
+            $today = Get-Date
+            $hasValidLabourHist = $person.labourHists | Where-Object {
+                $startDate = if ($_.startDate) { [DateTime]$_.startDate } else { $null }
+                $endDate = if ($_.endDate) { [DateTime]$_.endDate } else { $null }
+            
+                $isValid = $true
+                if ($startDate -and $startDate -gt $today) { $isValid = $false }
+                if ($null -ne $endDate -and $endDate -lt $today) { $isValid = $false }
+            
+                $isValid
+            }
+            $null -ne $hasValidLabourHist
+        }
+        $persons = $persons | Select-Object -Property uname, externalId, resource, firstName, lastName, gender, phone, email
+        $persons = $persons | Sort-Object uname -Unique
+        write-information "Total number of active humanresources retrieved: $($persons.count)."
 
-    $splatGetUsers = @{
-        Uri     = "$($config.BaseUrl)/users?limit=0"
-        Headers = $headers
-        Method  = 'GET'
+        # Example how to use the externalId from humanresources when it is used. Part [1/2]
+        # foreach ($person in $persons) {
+        #     # Custom checking if person has externalId and filtering persons without a numbers as externalId or uname
+        #     if (-not [string]::IsNullOrEmpty($person.externalId)) {
+        #         $person.resource = $person.externalId
+        #     }
+        # }
+        # 
+    } 
+
+    $actionMessage = "retrieving resource groups"
+    $splatGetResourceGroups = @{
+        Uri = "$($Script:BaseUrl)/v2/resourcegroups"
     }
-
-    $personsWebRequest = Invoke-WebRequest @splatGetUsers
-    $personsCorrected = [Text.Encoding]::UTF8.GetString([Text.Encoding]::UTF8.GetBytes($personsWebRequest.content))
-    $personObjects = $personsCorrected | ConvertFrom-Json
-    $persons = $personObjects | Where-Object active -eq "True"
-    $persons = $persons | Sort-Object resource -Unique
+    $resourceGroupsResponse = Invoke-IntusInplanningRestMethod @splatGetResourceGroups
+    $resourceGroups = $resourceGroupsResponse | Sort-Object uname -Unique
+    $resourceGroupsGrouped = $resourceGroups | Group-Object -Property uname -AsHashTable
+    write-information "Total number of unique resource groups retrieved: $($resourceGroups.count)."
 
     $today = Get-Date
     $startDate = $today.AddDays( - $($config.HistoricalDays)).ToString('yyyy-MM-dd')
     $endDate = $today.AddDays($($config.FutureDays)).ToString('yyyy-MM-dd')
 
-
-
     foreach ($person in $persons) {
-        start-sleep  -Milliseconds 500
-        try {
-            If(($person.resource.Length -gt 0) -Or ($null -ne $person.resource)){
-
-            # Create an empty list that will hold all shifts (contracts)
+        $actionMessage = "retrieving roster date for person [$($person.resource)]"
+        if (-not([string]::IsNullOrEmpty($person.resource))) { 
             $contracts = [System.Collections.Generic.List[object]]::new()
 
-            # Check if token is still valid
-            if(-not (Confirm-AccessTokenIsValid)){
-                $accessToken = Retrieve-AccessToken
-
-                $headers = @{
-                    Authorization = "Bearer $($accessToken)"
-                    Accept        = 'application/json; charset=utf-8'
-                }
-            }
-
+            #resource can contain special characters
+            $personResource = $([System.Web.HttpUtility]::UrlEncode($person.resource))
+            # Example how to use the externalId from humanresources when it is used. Part [2/2]
+            # $personResource = $([System.Web.HttpUtility]::UrlEncode($person.uname))
             $splatGetUsersShifts = @{
-                Uri     = "$($config.BaseUrl)/roster/resourceRoster?resource=$($person.resource)&startDate=$($startDate)&endDate=$($endDate)"
-                Headers = $headers
-                Method  = 'GET'
-                TimeoutSec = 3
-            }
-            
-            # Retry logic for fetching shifts
-            $maxRetries = 3
-            $retryCount = 0
-            $success = $false
-            
-            while (-not $success -and $retryCount -lt $maxRetries) {
-                try {
-                    $personShifts = Invoke-RestMethod @splatGetUsersShifts
-                    $success = $true
-                } catch {
-                    $retryCount++
-                    if ($retryCount -lt $maxRetries) {
-                        Write-Warning "Retrying shifts for user [$($person.username)] with resource ID [$($person.resource)]... ($retryCount/$maxRetries). Error: $($_.Exception.Message)"
-                        Start-Sleep -Milliseconds 500
-                    }
-                }
-            }
-            
-            if (-not $success) {
-                Write-Warning "Could not fetch shifts for user [$($person.username)] with resource ID [$($person.resource)] after $maxRetries attempts. Skipping user."
-                continue
+                Uri = "$($Script:BaseUrl)/roster/resourceRoster?resource=$($personResource)&startDate=$($startDate)&endDate=$($endDate)"
             }
 
-            If($personshifts.count -gt 0){
-            $counter = 0
-            foreach ($day in $personShifts.days) {
+            [array]$personShifts = Invoke-IntusInplanningRestMethod @splatGetUsersShifts
 
-                # Removes days when person has vacation
-                if ((-not($day.parts.count -eq 0)) -and ($null -eq $day.absence)) {
+            If ($personShifts.count -gt 0) {
+                foreach ($day in $personShifts.days) {
+                    # Reset counter to keep external ID after each day the same
+                    $counter = 0
 
-                    $rosterDate = $day.rosterDate
-                    foreach ($part in $day.parts) {
-                        $counter = ($counter + 1)
-                      if ($part.shift.uname -like '*:*') {
+                    # Removes days when person has vacation
+                    if ((-not($day.parts.count -eq 0)) -and ($null -eq $day.absence)) {
+
+                        $rosterDate = $day.rosterDate
+                        
+                        foreach ($part in $day.parts) {
+                            $counter = $counter + 1
+                            $externalId = "$($person.resource)-$($rosterDate)-$($counter)"
+                            
+                            if ($part.shift.uname -like '*:*') {
+                                # Define the pattern for hh:mm-hh:mm
                                 $pattern = '^\d{2}:\d{2}-\d{2}:\d{2}'
-                                $isFormatted = $true
-                            } else {
-                                # Formaat: hhmm-hhmm .
-                                $pattern = '^\d{4}-\d{4}'
-                                $isFormatted = $false
+                                $time = [regex]::Match($part.shift.uname, $pattern)
+                                if ($time.Success) {
+                                    $times = $time.value -split '-'
+                                    $startTime = $times[0]
+                                    $endTime = $times[1]
+                                }
+                                else {
+                                    $startTime = '00:00'
+                                    $endTime = '00:00'
+                                }
                             }
-                          
-                            $time = [regex]::Match($part.shift.uname, $pattern)
-                           
-                            if ($time.Success) {
-                                $times = $time.value -split '-'
-                                
-                                $startTimeUnformatted = $times[0]
-                                $endTimeUnformatted = $times[1]
-
-                                #Formatteer naar HH:MM 
-                                if (-not $isFormatted) {
-                                    # Converteert "0700" naar "07:00"
+                            else {
+                                # Define the pattern for hhmm-hhmm
+                                $pattern = '^\d{4}-\d{4}'
+                                $time = [regex]::Match($part.shift.uname, $pattern)
+                                if ($time.Success) {
+                                    $times = $time.value -split '-'
+                                    $startTimeUnformatted = $times[0]
+                                    $endTimeUnformatted = $times[1]
+                                    # Format HHMM to HH:MM
                                     $startTime = "$($startTimeUnformatted.Substring(0, 2)):$($startTimeUnformatted.Substring(2, 2))"
                                     $endTime = "$($endTimeUnformatted.Substring(0, 2)):$($endTimeUnformatted.Substring(2, 2))"
-                                } else {
-                                    
-                                    $startTime = $startTimeUnformatted
-                                    $endTime = $endTimeUnformatted
                                 }
-
-                            } else {
-                                $startTime = '00:00'
-                                $endTime = '00:00'
-                                
+                                else {
+                                    $startTime = '00:00'
+                                    $endTime = '00:00'
+                                }
                             }
 
-                        if($part.prop){
-                            $functioncode = $part.prop.uname
-                            $function = $part.prop.name
-                        } else {
-                            $functioncode = ""
-                            $function = ""
-                        }
+                            if ($part.prop) {
+                                $functioncode = $part.prop.uname
+                                $function = $part.prop.name
+                            }
+                            else {
+                                $functioncode = ""
+                                $function = ""
+                                # break # If you want to skip shifts without a function, you can uncomment this line.
+                            }
 
-                        $ShiftContract = @{
-                            externalId      = "$($person.resource)$($rosterDate)$($time)$($counter)$($part.group.externalId)"
-                            labourHist      = $part.labourHist
-                            labourHistGroup = $part.labourHistGroup
-                            shift           = $part.shift
-                            group           = $part.group
-                            functioncode    = $functioncode
-                            functionname    = $function
-                            # Add the same fields as for shift. Otherwise, the HelloID mapping will fail
-                            # The value of both the 'startAt' and 'endAt' cannot be null. If empty, HelloID is unable
-                            # to determine the start/end date, resulting in the contract marked as 'active'.
-                            startAt         = "$($rosterDate)T$($startTime):00Z"
-                            endAt           = "$($rosterDate)T$($endTime):00Z"
+                            $groupExternalId = $part.group.externalId
+                            if (-not [string]::IsNullOrEmpty($groupExternalId)) {
+                                $partentGroup = $resourceGroupsGrouped[$groupExternalId].parent
+                            }
+
+                            $ShiftContract = @{
+                                externalId      = $externalId 
+                                labourHist      = $part.labourHist
+                                labourHistGroup = $part.labourHistGroup
+                                shift           = $part.shift
+                                group           = $part.group
+                                parentGroup     = $partentGroup
+                                functioncode    = $functioncode
+                                functionname    = $function
+                                # Add the same fields as for shift. Otherwise, the HelloID mapping will fail
+                                # The value of both the 'startAt' and 'endAt' cannot be null. If empty, HelloID is unable
+                                # to determine the start/end date, resulting in the contract marked as 'active'.
+                                startAt         = "$($rosterDate)T$($startTime):00Z"
+                                endAt           = "$($rosterDate)T$($endTime):00Z"
+                            }
+
+                            $contracts.Add($ShiftContract)
                         }
-                       if (
-                                ([string]::IsNullOrEmpty($ShiftContract.functionname) -ne $True) # Function should not be empty. 
-                                ) {
-                                $contracts.Add($ShiftContract)
-                                } else {
-                                    #$contracts.Add($ShiftContract) # If you need the contracts without the functionnames enable this line. 
-                                 }
-                        
                     }
                 }
-            }
 
-            if ($contracts.Count -gt 0) {
-                $personObj = [PSCustomObject]@{
-                    ExternalId  = $person.resource
-                    DisplayName = "$($person.firstName) $($person.lastName)".Trim(' ')
-                    FirstName   = $person.firstName
-                    LastName    = $person.lastName
-                    Email       = $person.email
-                    Role        = $($person.roles.role | Sort-Object | Get-Unique)
-                    resourceGroup= $($person.roles.resourceGroup | Sort-Object | Get-Unique)
-                    shiftGroup   = $($person.roles.shiftGroup | Sort-Object | Get-Unique)
-                    Contracts    = $contracts
+                if ($contracts.Count -gt 0) {
+                    $personObj = [PSCustomObject]@{
+                        ExternalId  = $person.resource
+                        DisplayName = "$($person.firstName) $($person.lastName)".Trim(' ') + " ($($person.resource))"
+                        FirstName   = $person.firstName
+                        LastName    = $person.lastName
+                        Email       = $person.email
+                        Contracts   = $contracts
+                    }
+                    Write-Output $personObj | ConvertTo-Json -Depth 10
+                    $count++
                 }
-                Write-Output $personObj | ConvertTo-Json -Depth 20
-            }}
-        }} catch {
-            $ex = $PSItem
-            if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException')) {
-                $errorObj = Resolve-InplanningError -ErrorObject $ex
-                Write-Verbose "Could not import Inplanning person [$($person.username)]. Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
-                Write-Error "Could not import Inplanning person [$($person.username)]. Error: $($errorObj.FriendlyMessage)"
-            } else {
-                Write-Verbose "Could not import Inplanning person [$($person.username)]. Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
-                Write-Error "Could not import Inplanning person [$($person.username)]. Error: $($errorObj.FriendlyMessage)"
             }
         }
     }
-} catch {
+    Write-Information "Total number of persons processed: $count."
+}
+catch {
     $ex = $PSItem
-    if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException')) {
-        $errorObj = Resolve-InplanningError -ErrorObject $ex
-        Write-Verbose "Could not import Inplanning persons. Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
-        Write-Error "Could not import Inplanning persons. Error: $($errorObj.FriendlyMessage)"
-    } else {
-        Write-Verbose "Could not import Inplanning persons. Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
-        Write-Error "Could not import Inplanning persons. Error: $($errorObj.FriendlyMessage)"
+    if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
+        $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
+        $errorObj = Resolve-IntusInplanningError -ErrorObject $ex
+        Write-Warning "Error while $actionMessage. Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
+        Write-Error "Error while $actionMessage. Error: $($errorObj.FriendlyMessage)"
+    }
+    else {
+        Write-Warning "Error while $actionMessage. Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
+        Write-Error "Error while $actionMessage. Error: $($ex.Exception.Message)"
     }
 }
