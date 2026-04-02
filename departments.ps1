@@ -1,7 +1,7 @@
 ##################################################
 # HelloID-Conn-Prov-Source-Intus-Inplanning-Departments
 #
-# Version: 1.1.0
+# Version: 1.2.0
 ##################################################
 
 # Initialize default value's

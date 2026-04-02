@@ -1,14 +1,11 @@
 
 # HelloID-Conn-Prov-Source-Intus-Inplanning
 
-**Readme is work in progress**
-
-| :information_source: Information                                                                                                                                                                                                                                                                                                                                                       |
-| :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| This repository contains the connector and configuration code only. The implementer is responsible to acquire the connection details such as username, password, certificate, etc. You might even need to sign a contract or agreement with the supplier before implementing this connector. Please contact the client's application manager to coordinate the connector requirements. |
+> [!IMPORTANT]
+> This repository contains the connector and configuration code only. The implementer is responsible to acquire the connection details such as username, password, certificate, etc. You might even need to sign a contract or agreement with the supplier before implementing this connector. Please contact the client's application manager to coordinate the connector requirements.
 
 <p align="center">
-  <img src="">
+  <img src="https://github.com/Tools4everBV/HelloID-Conn-Prov-Source-Intus-Inplanning/blob/main/Logo.png?raw=true">
 </p>
 
 ## Table of contents
@@ -26,24 +23,23 @@
 
 ## Introduction
 
-_HelloID-Conn-Prov-Source-Intus-Inplanning_ is a _source_ connector. The purpose of this connector is to import _humanresources_ and their _resourceRoster_. A resourceRoster represents a timetable consisting of days and parts which include work places.
+_HelloID-Conn-Prov-Source-Intus-Inplanning_ is a _source_ connector. The purpose of this connector is to import _users_ or _humanresources_ and their _resourceRoster_. A resourceRoster represents a timetable consisting of days and parts which include work places.
 
 ### Endpoints
 
 Currently the following endpoints are being used..
 
-| Endpoint                  | Description                                           |
-| ------------------------- | ----------------------------------------------------- |
-| api/token                 |                                                       |
-| api/users                 | Default endpoint to get all users                     |
-| api/humanresources        | Optional endpoint to receive employees without a user |
-| api/resourcegroups        | To calculate upper department                         |
-| api/roster/resourceRoster |                                                       |
+| Endpoint                  | Method | Description                                           |
+| ------------------------- | ------ | ----------------------------------------------------- |
+| api/token                 | POST   |                                                       |
+| api/users                 | GET    | Default endpoint to get all users                     |
+| api/humanresources        | GET    | Optional endpoint to receive employees without a user |
+| api/resourcegroups        | GET    | To calculate upper department                         |
+| api/roster/resourceRoster | GET    |
 
 
-- The API documentation can be found at the URLs below. Make sure to replace {customerName} with the customer's name to create a working URL.
->  [Inplanning API documentation Human resources](https://{customerName}.rooster.nl/InPlanningService/openapi/#/default/getHumanResources).
->  [Inplanning API documentation Resource roster](https://{customerName}.rooster.nl/InPlanningService/openapi/#/default/getResourceRoster).
+- The API documentation can be found at the URL below. Make sure to replace {customerName} with the customer's name to create a working URL.
+  - [Inplanning API documentation](https://{customerName}.rooster.nl/InPlanningService/openapi/).
 
 ## Getting started
 
@@ -66,9 +62,12 @@ The following settings are required to connect to the API.
 - We filter out absences to avoid creating contracts and granting permissions in target systems based on shifts that will not take place.
 
 - Diacritical marks do not come through correctly in HelloID when the connector is run on-premises. Therefore, it is preferable not to enable that toggle.
+
+- To prevent timeouts, the code uses `Start-Sleep`. Adjust the sleep intervals if performance issues occur in inPlanning.
+
 #### Logic in-depth
 
-The purpose of this connector is to import _humanresources_ and their _resourceRoster_. A resource roster consists of days which include parts. each part represents a shift with a start and end time. Each part will result in a contract in HelloID
+The purpose of this connector is to import _users_ or _humanresources_ and their _resourceRoster_. A resource roster consists of days which include parts. each part represents a shift with a start and end time. Each part will result in a contract in HelloID
 
 All workers are imported and then the days will be imported within a specified timeframe, configured by the `HistoricalDays` and `FutureDays` settings in the configuration.
 

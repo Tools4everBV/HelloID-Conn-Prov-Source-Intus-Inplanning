@@ -1,7 +1,7 @@
 ##################################################
 # HelloID-Conn-Prov-Source-Intus-Inplanning-Persons
 #
-# Version: 1.1.0
+# Version: 1.2.0
 ##################################################
 
 # Sleep is added because the department script needs to finish first (invalid token messages can occur otherwise)

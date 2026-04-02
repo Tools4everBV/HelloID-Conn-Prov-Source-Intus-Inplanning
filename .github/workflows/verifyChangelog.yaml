@@ -1,0 +1,11 @@
+name: VerifyChangelog
+on:
+  pull_request:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  verify-changelog:
+    uses: Tools4everBV/.github/.github/workflows/verifyChangelog.yaml@main
