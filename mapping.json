@@ -1,78 +1,184 @@
 {
   "personMappings": [
     {
+      "name": "Aggregation",
+      "mode": "complex",
+      "value": "/* This value is used for automatic person aggregation (if enabled) to suggest aggregation of persons based on similar aggregation values.\r\n* The value will be converted to upper case and all white-spaces and special characters, except single quotes, will be removed.\r\n* This field is limited to 200 characters, empty or null values will exclude the person from suggestions.\r\n*/\r\n\r\nfunction getAggregationValue() {\r\n\tlet value = \"PERSON\" + source.ExternalId + \"PERSON\"\r\n\treturn value;\r\n}\r\n\r\n\r\n\r\n/*\r\nfunction getAggregationValue() {\r\n\tlet value = ''\r\n\tif (source.DisplayName) {\r\n\t\tvalue = value.concat(source.DisplayName.split(\" \")[0]);\r\n\t}\r\n\tif (source.lastName) {\r\n\t\tvalue = value.concat(source.lastName);\r\n\t}\r\n\tif (source.dateOfBirth) {\r\n\t\tlet d = new Date(source.dateOfBirth);\r\n\t\tlet birthDate = d.getFullYear() + '' + d.getMonth() + '' + d.getDate();\r\n\t\tvalue = value.concat(birthDate);\r\n\t}\r\n\tif (source.gender != null) {\r\n\t\tvalue = value.concat(source.gender === \"Male\" ? \"M\" : \"F\");\r\n\t}\r\n\tif (source.HomeAddress_city) {\r\n\t\tvalue = value.concat(source.HomeAddress_city)\r\n\t}\r\n\tif (source.HomeAddress_street) {\r\n\t\tvalue = value.concat(source.HomeAddress_street.substring(0, 16));\r\n\t}\r\n\treturn deleteDiacriticalMarks(value);\r\n\treturn null;\r\n}\r\n*/\r\ngetAggregationValue()",
+      "validation": {
+        "required": false
+      }
+    },
+    {
       "name": "Contact.Business.Email",
       "mode": "field",
       "value": "Email",
-      "validation": { "required": false }
+      "validation": {
+        "required": false
+      }
     },
     {
       "name": "Contact.Business.Phone.Fixed",
       "mode": "field",
       "value": "PhoneNumber",
-      "validation": { "required": false }
+      "validation": {
+        "required": false
+      }
     },
     {
       "name": "ExternalId",
       "mode": "field",
       "value": "ExternalId",
-      "validation": { "required": false }
+      "validation": {
+        "required": false
+      }
     },
     {
       "name": "Name.FamilyName",
       "mode": "field",
       "value": "LastName",
-      "validation": { "required": false }
+      "validation": {
+        "required": false
+      }
     },
     {
       "name": "Name.NickName",
       "mode": "field",
       "value": "FirstName",
-      "validation": { "required": false }
+      "validation": {
+        "required": false
+      }
     },
     {
       "name": "UserName",
       "mode": "field",
       "value": "DisplayName",
-      "validation": { "required": false }
+      "validation": {
+        "required": false
+      }
     }
   ],
   "contractMappings": [
     {
+      "name": "Custom.Intusshift",
+      "mode": "field",
+      "value": "shift.uname",
+      "validation": {
+        "required": false
+      },
+      "convertToString": true
+    },
+    {
+      "name": "Custom.PrimaryPerson",
+      "mode": "fixed",
+      "value": "2",
+      "validation": {
+        "required": false
+      },
+      "convertToString": true
+    },
+    {
+      "name": "Department.DisplayName",
+      "mode": "field",
+      "value": "group.name",
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "name": "Department.ExternalId",
+      "mode": "field",
+      "value": "group.uname",
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "name": "Division.Code",
+      "mode": "field",
+      "value": "group.uname",
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "name": "Division.ExternalId",
+      "mode": "field",
+      "value": "group.uname",
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "name": "Division.Name",
+      "mode": "field",
+      "value": "group.description",
+      "validation": {
+        "required": false
+      }
+    },
+    {
       "name": "EndDate",
       "mode": "field",
       "value": "endAt",
-      "validation": { "required": false }
+      "validation": {
+        "required": false
+      }
     },
     {
       "name": "ExternalId",
       "mode": "field",
       "value": "externalId",
-      "validation": { "required": false }
-    },
-    {
-      "name": "StartDate",
-      "mode": "field",
-      "value": "startAt",
-      "validation": { "required": false }
+      "validation": {
+        "required": false
+      }
     },
     {
       "name": "Location.Code",
       "mode": "field",
       "value": "group.uname",
-      "validation": { "required": false }
+      "validation": {
+        "required": false
+      }
     },
     {
       "name": "Location.ExternalId",
       "mode": "field",
       "value": "group.externalId",
-      "validation": { "required": false }
+      "validation": {
+        "required": false
+      }
     },
     {
-      "name": "Location.Name",
+      "name": "StartDate",
       "mode": "field",
-      "value": "group.name",
-      "validation": { "required": false }
+      "value": "startAt",
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "name": "Title.Code",
+      "mode": "field",
+      "value": "functioncode",
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "name": "Title.ExternalId",
+      "mode": "field",
+      "value": "functioncode",
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "name": "Title.Name",
+      "mode": "field",
+      "value": "functionname",
+      "validation": {
+        "required": false
+      }
     }
   ]
 }
