@@ -59,24 +59,6 @@
   ],
   "contractMappings": [
     {
-      "name": "Custom.Intusshift",
-      "mode": "field",
-      "value": "shift.uname",
-      "validation": {
-        "required": false
-      },
-      "convertToString": true
-    },
-    {
-      "name": "Custom.PrimaryPerson",
-      "mode": "fixed",
-      "value": "2",
-      "validation": {
-        "required": false
-      },
-      "convertToString": true
-    },
-    {
       "name": "Department.DisplayName",
       "mode": "field",
       "value": "group.name",
