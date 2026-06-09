@@ -153,6 +153,10 @@ function Invoke-IntusInplanningRestMethod {
                     Write-Warning "Resource does not exist: $Uri"
                     break
                 }
+                if ($errorObj.FriendlyMessage -like '*9997 - This roster cannot be displayed.*') {
+                    Write-Warning "Action skipped for uri [$($SplatRestMethodParameters.Uri)]. Error: [$($errorObj.ErrorDetails)] [$($errorObj.FriendlyMessage)]"
+                    break
+                }
                 $retryCount++
                 if ($retryCount -lt $maxRetries) {
                     if (($errorObj.ErrorDetails -eq 'invalid_token') -or ($errorObj.ErrorDetails -eq 'token_expired')) {
