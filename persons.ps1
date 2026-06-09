@@ -1,7 +1,7 @@
 ##################################################
 # HelloID-Conn-Prov-Source-Intus-Inplanning-Persons
 #
-# Version: 1.2.0
+# Version: 1.3.0
 ##################################################
 
 # Sleep is added because the department script needs to finish first (invalid token messages can occur otherwise)
@@ -224,7 +224,7 @@ try {
         }
         $persons = $persons | Select-Object -Property uname, externalId, resource, firstName, lastName, gender, phone, email
         $persons = $persons | Sort-Object uname -Unique
-        write-information "Total number of active humanresources retrieved: $($persons.count)."
+        Write-Information "Total number of active humanresources retrieved: $($persons.count)."
 
         # Example how to use the externalId from humanresources when it is used. Part [1/2]
         # foreach ($person in $persons) {
@@ -233,7 +233,6 @@ try {
         #         $person.resource = $person.externalId
         #     }
         # }
-        # 
     } 
 
     $actionMessage = "retrieving resource groups"
@@ -243,28 +242,52 @@ try {
     $resourceGroupsResponse = Invoke-IntusInplanningRestMethod @splatGetResourceGroups
     $resourceGroups = $resourceGroupsResponse | Sort-Object uname -Unique
     $resourceGroupsGrouped = $resourceGroups | Group-Object -Property uname -AsHashTable
-    write-information "Total number of unique resource groups retrieved: $($resourceGroups.count)."
+    Write-Information "Total number of unique resource groups retrieved: $($resourceGroups.count)."
 
     $today = Get-Date
     $startDate = $today.AddDays( - $($config.HistoricalDays)).ToString('yyyy-MM-dd')
     $endDate = $today.AddDays($($config.FutureDays)).ToString('yyyy-MM-dd')
 
+    # Retrieve all roster data grouped by resourceGroup
+    $actionMessage = "retrieving roster data for all resource groups"
+    $allGroupRosters = @()
+    foreach ($resourceGroup in $resourceGroups) {
+        $groupRosterEncoded = $([System.Web.HttpUtility]::UrlEncode($resourceGroup.uname))
+        $splatGetGroupRosters = @{
+            Uri = "$($Script:BaseUrl)/roster/groupRoster?resourceGroup=$($groupRosterEncoded)&startDate=$($startDate)&endDate=$($endDate)"
+        }
+        
+        $groupRosterResponse = Invoke-IntusInplanningRestMethod @splatGetGroupRosters
+        if ($null -ne $groupRosterResponse) {
+            $allGroupRosters += $groupRosterResponse
+        }
+    }
+    Write-Information "Total number of resource groups with roster data retrieved: $($allGroupRosters.count)."
+
+    $actionMessage = "grouping roster data for persons"
+    # Create a hashtable for quick lookup of rosters by resource
+    $rostersByResource = @{}
+    foreach ($groupRoster in $allGroupRosters) {
+        if ($null -ne $groupRoster.resourceRosters) {
+            foreach ($resourceRoster in $groupRoster.resourceRosters) {
+                # Rosters are added to the hashtable with the resource as key. If multiple rosters exist for the same resource, only the first one will be added (since they should all contain the same roster data for that resource).
+                if (-not $rostersByResource.ContainsKey($resourceRoster.uname)) {
+                    $rostersByResource[$resourceRoster.uname] = $resourceRoster
+                } 
+            }
+        }
+    }
+    Write-Information "Total number of unique rosters retrieved: $($rostersByResource.Count)."
+
     foreach ($person in $persons) {
-        $actionMessage = "retrieving roster date for person [$($person.resource)]"
+        $actionMessage = "processing roster data for person [$($person.resource)]"
         if (-not([string]::IsNullOrEmpty($person.resource))) { 
             $contracts = [System.Collections.Generic.List[object]]::new()
 
-            #resource can contain special characters
-            $personResource = $([System.Web.HttpUtility]::UrlEncode($person.resource))
-            # Example how to use the externalId from humanresources when it is used. Part [2/2]
-            # $personResource = $([System.Web.HttpUtility]::UrlEncode($person.uname))
-            $splatGetUsersShifts = @{
-                Uri = "$($Script:BaseUrl)/roster/resourceRoster?resource=$($personResource)&startDate=$($startDate)&endDate=$($endDate)"
-            }
+            # Get roster data from the grouped data
+            $personShifts = $rostersByResource[$person.resource]
 
-            [array]$personShifts = Invoke-IntusInplanningRestMethod @splatGetUsersShifts
-
-            If ($personShifts.count -gt 0) {
+            if (($personShifts | Measure-Object).Count -gt 0) {
                 foreach ($day in $personShifts.days) {
                     # Reset counter to keep external ID after each day the same
                     $counter = 0

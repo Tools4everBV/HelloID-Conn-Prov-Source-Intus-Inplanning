@@ -29,13 +29,13 @@ _HelloID-Conn-Prov-Source-Intus-Inplanning_ is a _source_ connector. The purpose
 
 Currently the following endpoints are being used..
 
-| Endpoint                  | Method | Description                                           |
-| ------------------------- | ------ | ----------------------------------------------------- |
-| api/token                 | POST   |                                                       |
-| api/users                 | GET    | Default endpoint to get all users                     |
-| api/humanresources        | GET    | Optional endpoint to receive employees without a user |
-| api/resourcegroups        | GET    | To calculate upper department                         |
-| api/roster/resourceRoster | GET    |
+| Endpoint               | Method | Description                                                       |
+| ---------------------- | ------ | ----------------------------------------------------------------- |
+| api/token              | POST   |                                                                   |
+| api/users              | GET    | Default endpoint to get all users                                 |
+| api/humanresources     | GET    | Optional endpoint to receive employees without a user             |
+| api/resourcegroups     | GET    | To calculate upper department                                     |
+| api/roster/groupRoster | GET    | To retrieve rosters off all users by querying all resource groups |
 
 
 - The API documentation can be found at the URL below. Make sure to replace {customerName} with the customer's name to create a working URL.
