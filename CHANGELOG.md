@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com), and this project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.3.0] - 09-06-2026
+
+### Changed
+
+- Increased performance substantially by retrieving roster data from `api/roster/groupRoster` instead of `api/roster/resourceRoster`.
+
 ## [1.2.1] - 09-06-2026
 
 ### Fixed
