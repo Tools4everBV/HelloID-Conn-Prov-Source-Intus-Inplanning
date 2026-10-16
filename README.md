@@ -54,6 +54,7 @@ The following settings are required to connect to the API.
 | BaseUrl        | The URL to the API                                                                                                                                                                               | Yes       |
 | HistoricalDays | - The number of days in the past from which the shifts will be imported.<br> - Will be converted to a `[DateTime]` object containing the _current date_ __minus__ the number of days specified.  | Yes       |
 | FutureDays     | - The number of days in the future from which the shifts will be imported.<br> - Will be converted to a `[DateTime]` object containing the _current date_ __plus__ the number of days specified. | Yes       |
+| ExcludeShiftsWithoutFunction     | - When enabled, shifts without a function will not be imported. This prevents importing days off. | No       |
 
 ### Remarks
 
