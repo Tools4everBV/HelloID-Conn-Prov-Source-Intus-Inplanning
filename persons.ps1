@@ -15,6 +15,7 @@ $Script:AuthenticationHeaders = $null
 $Script:BaseUrl = $config.BaseUrl
 $Script:Username = $config.Username
 $Script:Password = $config.Password
+$Script:ExcludeShiftsWithoutFunction = $config.ExcludeShiftsWithoutFunction
 
 #region functions
 function Resolve-IntusInplanningError {
@@ -300,6 +301,7 @@ try {
                     if ((-not($day.parts.count -eq 0)) -and ($null -eq $day.absence)) {
 
                         $rosterDate = $day.rosterDate
+                        $rosterEndDate = $rosterDate
                         
                         foreach ($part in $day.parts) {
                             $counter = $counter + 1
@@ -310,13 +312,9 @@ try {
                                 $pattern = '^\d{2}:\d{2}-\d{2}:\d{2}'
                                 $time = [regex]::Match($part.shift.uname, $pattern)
                                 if ($time.Success) {
-                                    $times = $time.value -split '-'
-                                    $startTime = $times[0]
-                                    $endTime = $times[1]
-                                }
-                                else {
-                                    $startTime = '00:00'
-                                    $endTime = '00:00'
+                                    if($part.shift.uname.EndsWith('p')){
+                                        $rosterEndDate = ([datetime]$rosterDate).AddDays(1).ToString("yyyy-MM-dd")
+                                    }
                                 }
                             }
                             else {
@@ -324,16 +322,9 @@ try {
                                 $pattern = '^\d{4}-\d{4}'
                                 $time = [regex]::Match($part.shift.uname, $pattern)
                                 if ($time.Success) {
-                                    $times = $time.value -split '-'
-                                    $startTimeUnformatted = $times[0]
-                                    $endTimeUnformatted = $times[1]
-                                    # Format HHMM to HH:MM
-                                    $startTime = "$($startTimeUnformatted.Substring(0, 2)):$($startTimeUnformatted.Substring(2, 2))"
-                                    $endTime = "$($endTimeUnformatted.Substring(0, 2)):$($endTimeUnformatted.Substring(2, 2))"
-                                }
-                                else {
-                                    $startTime = '00:00'
-                                    $endTime = '00:00'
+                                    if($part.shift.uname.EndsWith('p')){
+                                        $rosterEndDate = ([datetime]$rosterDate).AddDays(1).ToString("yyyy-MM-dd")
+                                    }
                                 }
                             }
 
@@ -344,7 +335,10 @@ try {
                             else {
                                 $functioncode = ""
                                 $function = ""
-                                # break # If you want to skip shifts without a function, you can uncomment this line.
+                                
+                                if($Script:ExcludeShiftsWithoutFunction){
+                                    break
+                                }
                             }
 
                             $groupExternalId = $part.group.externalId
@@ -364,8 +358,8 @@ try {
                                 # Add the same fields as for shift. Otherwise, the HelloID mapping will fail
                                 # The value of both the 'startAt' and 'endAt' cannot be null. If empty, HelloID is unable
                                 # to determine the start/end date, resulting in the contract marked as 'active'.
-                                startAt         = "$($rosterDate)T$($startTime):00Z"
-                                endAt           = "$($rosterDate)T$($endTime):00Z"
+                                startAt         = "$($rosterDate)"
+                                endAt           = "$($rosterEndDate)"
                             }
 
                             $contracts.Add($ShiftContract)

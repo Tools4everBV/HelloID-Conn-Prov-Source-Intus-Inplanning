@@ -49,5 +49,14 @@
       "description": "The number of days in the future from which the shifts will be imported.",
       "required": true
     }
+  },
+  {
+    "key": "ExcludeShiftsWithoutFunction",
+    "type": "checkbox",
+    "defaultValue": false,
+    "templateOptions": {
+      "label": "Exclude shifts without function",
+      "required": false
+    }
   }
 ]
